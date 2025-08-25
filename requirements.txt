@@ -1,0 +1,3 @@
+ipwhois
+python-dotenv
+requests
