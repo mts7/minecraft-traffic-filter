@@ -1,7 +1,7 @@
 import os
-import sys
-import subprocess
 import re
+import subprocess  # nosec[B404]
+import sys
 
 PF_CONF_PATH = "/etc/pf.conf"
 
@@ -22,13 +22,16 @@ def append_pf_rule(ip: str) -> None:
 
 
 def reload_pfctl() -> None:
-    subprocess.run(["pfctl", "-f", PF_CONF_PATH], check=True)
-    subprocess.run(["pfctl", "-E"], check=True)
+    subprocess.run(["/sbin/pfctl", "-f", PF_CONF_PATH],
+                   check=True, shell=False)  # nosec[B603]
+    subprocess.run(["/sbin/pfctl", "-E"], check=True,
+                   shell=False)  # nosec[B603]
 
 
 def main() -> None:
     if not is_root():
-        print("This script must be run as root. Use 'sudo python block_ip.py <ip>'")
+        print("This script must be run as root. "
+              "Use 'sudo python block_ip.py <ip>'")
         sys.exit(1)
 
     if len(sys.argv) != 2:
@@ -44,8 +47,8 @@ def main() -> None:
     append_pf_rule(ip)
     reload_pfctl()
     print("Block rule added and pfctl reloaded.")
-    subprocess.run(["pfctl", "-sr"])
-    subprocess.run(["cat", PF_CONF_PATH])
+    subprocess.run(["/sbin/pfctl", "-sr"], shell=False)  # nosec[B603]
+    subprocess.run(["/bin/cat", PF_CONF_PATH], shell=False)  # nosec[B603]
 
 
 if __name__ == "__main__":

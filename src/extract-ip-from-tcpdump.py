@@ -1,6 +1,7 @@
+import ipaddress
 import os
-import subprocess
 import re
+import subprocess  # nosec[B404]
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -35,11 +36,16 @@ def run_tcpdump() -> None:
     """
     Executes the tcpdump command and prints destination IPs from output.
     """
-    host = os.getenv("IP_ADDRESS")
+    host = os.getenv("IP_ADDRESS", "")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        raise ValueError(f"Invalid IP address: {host}")
+
     command: list[str] = [
         "sudo",
         "tcpdump",
-        "-i", os.getenv("NETWORK_INTERFACE"),
+        "-i", os.getenv("NETWORK_INTERFACE", "en1"),
         "-nnA",
         f"host {host} and "
         "(port 25565 or port 19132) and "
@@ -48,7 +54,7 @@ def run_tcpdump() -> None:
     print(f"command: {command}")
 
     process: subprocess.Popen[str] = subprocess.Popen(
-        command,
+        command,  # nosec[B603]
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
@@ -58,7 +64,8 @@ def run_tcpdump() -> None:
     try:
         tracked_ips: set[str] = set()
         allowed_ips = load_allowed_ips()
-        assert process.stdout is not None
+        if process.stdout is None:
+            raise RuntimeError("Expected process.stdout to be non-None")
         for line in process.stdout:
             ip: Optional[str] = extract_destination_ip(line)
             if ip and should_track_ip(ip, tracked_ips, allowed_ips):

@@ -1,5 +1,6 @@
+import ipaddress
 import socket
-import subprocess
+import subprocess  # nosec[B404]
 from datetime import datetime
 
 DOMAINS = [
@@ -9,6 +10,7 @@ DOMAINS = [
     "login.live.com",
     "minecraftservices.com"
 ]
+
 
 def resolve_domain(domain: str) -> str | None:
     try:
@@ -20,7 +22,7 @@ def resolve_domain(domain: str) -> str | None:
 def ping(ip: str) -> bool:
     try:
         result = subprocess.run(
-            ["ping", "-c", "2", "-W", "2", ip],
+            ["/sbin/ping", "-c", "2", "-W", "2", ip],  # nosec[B603]
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
@@ -40,6 +42,10 @@ def main():
             print(f"{domain:<30} | Resolution failed")
             unreachable.append(domain)
             continue
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            raise ValueError(f"Invalid IP address: {ip}")
 
         reachable = ping(ip)
         status = "reachable" if reachable else "unreachable"

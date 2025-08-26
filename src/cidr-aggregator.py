@@ -2,10 +2,11 @@ import ipaddress
 import json
 import os
 
-from ipwhois import IPWhois
-from ipwhois.exceptions import IPDefinedError
+from ipwhois import IPWhois  # type: ignore[import-untyped]
+from ipwhois.exceptions import IPDefinedError  # type: ignore[import-untyped]
 
 CACHE_FILE = "cache_rdap.json"
+
 
 def load_cache() -> dict[str, str]:
     if not os.path.exists(CACHE_FILE):
@@ -13,9 +14,11 @@ def load_cache() -> dict[str, str]:
     with open(CACHE_FILE, "r") as f:
         return json.load(f)
 
+
 def save_cache(cache_contents):
     with open(CACHE_FILE, "w") as f:
         json.dump(cache_contents, f, indent=2)
+
 
 def get_cidr_ipwhois(ip_address: str, cache_values):
     if ip_address in cache_values:
@@ -37,6 +40,7 @@ def get_cidr_ipwhois(ip_address: str, cache_values):
         print(f"Unknown exception: {e}")
         return None
 
+
 def aggregate_ips(ips: list[str], cache_values: dict):
     unresolved_ips = []
     result = []
@@ -53,8 +57,10 @@ def aggregate_ips(ips: list[str], cache_values: dict):
 
     return list(set(result)), unresolved_ips
 
+
 def format_block_line(cidr: str) -> str:
     return f"block drop from {cidr} to any"
+
 
 def is_cidr(ip_address: str) -> bool:
     try:
@@ -190,12 +196,16 @@ if __name__ == "__main__":
         # "142.147.89.229",
         # "23.162.40.40",
         # "85.109.153.174",
-        "185.213.193.166",
-        "167.94.138.164",
-        "192.241.179.235",
-        "155.2.191.22",
+        "40.80.206.215",
         "51.158.65.133",
+        "104.234.115.94",
+        "155.2.191.22",
+        "155.2.191.72",
         "155.2.191.223",
+        "167.94.138.164",
+        "185.213.193.166",
+        "192.241.179.235",
+        "204.76.203.35",
     ]
 
     cache = load_cache()

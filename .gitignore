@@ -208,4 +208,5 @@ __marimo__/
 
 # Local Files
 .idea/
+.safety-project.ini
 pf.conf
