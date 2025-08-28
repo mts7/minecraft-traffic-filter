@@ -64,10 +64,13 @@ def run_tcpdump() -> None:
     try:
         tracked_ips: set[str] = set()
         allowed_ips = load_allowed_ips()
+        print(f"Retrieved {len(allowed_ips)} allowed IPs")
         if process.stdout is None:
             raise RuntimeError("Expected process.stdout to be non-None")
+        print("Checking each output line")
         for line in process.stdout:
             ip: Optional[str] = extract_destination_ip(line)
+            print(f"checking IP {ip} from line\n{line}")
             if ip and should_track_ip(ip, tracked_ips, allowed_ips):
                 track_ip(ip, tracked_ips, LOG_FILE)
     except KeyboardInterrupt:
