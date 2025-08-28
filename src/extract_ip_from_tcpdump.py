@@ -89,6 +89,6 @@ def track_ip(ip: str, tracked: set[str], log_file: str) -> None:
         f.write(f"{ip}\n")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     load_dotenv()
     run_tcpdump()

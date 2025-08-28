@@ -210,3 +210,5 @@ __marimo__/
 .idea/
 .safety-project.ini
 pf.conf
+cosmic-ray.sqlite
+cosmic_ray.html

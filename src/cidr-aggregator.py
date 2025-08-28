@@ -72,7 +72,7 @@ def is_cidr(ip_address: str) -> bool:
 
 
 if __name__ == "__main__":
-    ip_list = [
+    ip_list: list[str] = [
         # "20.14.73.238",
         # "20.65.193.35",
         # "20.65.194.162",
