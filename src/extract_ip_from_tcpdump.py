@@ -70,7 +70,6 @@ def run_tcpdump() -> None:
         print("Checking each output line")
         for line in process.stdout:
             ip: Optional[str] = extract_destination_ip(line)
-            print(f"checking IP {ip} from line\n{line}")
             if ip and should_track_ip(ip, tracked_ips, allowed_ips):
                 track_ip(ip, tracked_ips, LOG_FILE)
     except KeyboardInterrupt:

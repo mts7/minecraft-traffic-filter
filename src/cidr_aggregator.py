@@ -8,24 +8,35 @@ from ipwhois.exceptions import IPDefinedError  # type: ignore[import-untyped]
 CACHE_FILE = "cache_rdap.json"
 
 
-def load_cache() -> dict[str, str]:
-    if not os.path.exists(CACHE_FILE):
+def load_cache(path: str) -> dict[str, str]:
+    if not os.path.exists(path):
         return {}
-    with open(CACHE_FILE, "r") as f:
-        return json.load(f)
+    with open(path, "r") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise TypeError("Expected dict[str, str] in cache.json")
+
+    for k, v in data.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise TypeError("Cache must contain str-to-str mappings")
+
+    return data
 
 
-def save_cache(cache_contents):
-    with open(CACHE_FILE, "w") as f:
+def save_cache(cache_contents: dict[str, str], path: str):
+    with open(path, "w") as f:
         json.dump(cache_contents, f, indent=2)
 
 
-def get_cidr_ipwhois(ip_address: str, cache_values):
+def get_cidr_ipwhois(
+        ip_address: str, cache_values: dict[str, str]) -> str:
     if ip_address in cache_values:
         print(f"found {ip_address} in cache")
         return cache_values[ip_address]
 
     try:
+        # TODO: use dependency injection
         obj = IPWhois(ip_address)
         result = obj.lookup_rdap(depth=1)
         cidr = result.get("asn_cidr")
@@ -35,13 +46,15 @@ def get_cidr_ipwhois(ip_address: str, cache_values):
         return cidr
     except IPDefinedError as e:
         print(f"IPDefinedError with {e}")
-        return None
+        raise
     except Exception as e:
         print(f"Unknown exception: {e}")
-        return None
+        raise
 
 
-def aggregate_ips(ips: list[str], cache_values: dict):
+def aggregate_ips(
+    ips: list[str], cache_values: dict[str, str]
+) -> tuple[list[str], list[str]]:
     unresolved_ips = []
     result = []
 
@@ -69,6 +82,21 @@ def is_cidr(ip_address: str) -> bool:
     except ValueError as e:
         print(f"ValueError: {e}")
         return False
+
+
+def main(ips: list[str]) -> None:
+    cache = load_cache(CACHE_FILE)
+    aggregated, failed = aggregate_ips(ips, cache)
+    save_cache(cache, CACHE_FILE)
+
+    print("\n✅ Aggregated CIDRs and IPs:")
+    for entry in sorted(aggregated):
+        print(format_block_line(entry))
+
+    if failed:
+        print("\n⚠️ Unresolved IPs:")
+        for ip in failed:
+            print(format_block_line(ip))
 
 
 if __name__ == "__main__":
@@ -216,15 +244,4 @@ if __name__ == "__main__":
         # "217.144.184.3",
     ]
 
-    cache = load_cache()
-    aggregated, failed = aggregate_ips(ip_list, cache)
-    save_cache(cache)
-
-    print("\n✅ Aggregated CIDRs and IPs:")
-    for entry in sorted(aggregated):
-        print(format_block_line(entry))
-
-    if failed:
-        print("\n⚠️ Unresolved IPs:")
-        for ip in failed:
-            print(format_block_line(ip))
+    main(ip_list)
