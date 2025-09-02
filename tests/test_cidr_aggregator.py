@@ -143,12 +143,6 @@ def mock_ipdefinederror():
         yield mock_exc
 
 
-def test_get_cidr_ipwhois_cache_hit() -> None:
-    cache: Dict[str, str] = {"1.2.3.4": "1.2.3.0/24"}
-    result: str = get_cidr_ipwhois("1.2.3.4", cache)
-    assert result == "1.2.3.0/24"
-
-
 def test_get_cidr_ipwhois_success(
     mock_ipwhois: MagicMock
 ) -> None:
@@ -156,10 +150,8 @@ def test_get_cidr_ipwhois_success(
     mock_instance.lookup_rdap.return_value = {"asn_cidr": "5.6.7.0/24"}
     mock_ipwhois.return_value = mock_instance
 
-    cache: Dict[str, str] = {}
-    result: str = get_cidr_ipwhois("5.6.7.8", cache)
+    result: str = get_cidr_ipwhois("5.6.7.8")
     assert result == "5.6.7.0/24"
-    assert cache["5.6.7.8"] == "5.6.7.0/24"
 
 
 def test_get_cidr_ipwhois_no_cidr(
@@ -169,10 +161,8 @@ def test_get_cidr_ipwhois_no_cidr(
     mock_instance.lookup_rdap.return_value = {}
     mock_ipwhois.return_value = mock_instance
 
-    cache: Dict[str, str] = {}
-    result: str = get_cidr_ipwhois("9.9.9.9", cache)
+    result: str = get_cidr_ipwhois("9.9.9.9")
     assert result is None
-    assert "9.9.9.9" not in cache
 
 
 def test_get_cidr_ipwhois_ipdefinederror(
@@ -188,9 +178,7 @@ def test_get_cidr_ipwhois_ipdefinederror(
             "Reserved IP")
         mock_ipwhois.return_value = mock_instance
 
-        cache: Dict[str, str] = {}
-        get_cidr_ipwhois("192.168.0.1", cache)
-        assert "192.168.0.1" not in cache
+        get_cidr_ipwhois("192.168.0.1")
 
 
 def test_get_cidr_ipwhois_generic_exception(
@@ -199,9 +187,7 @@ def test_get_cidr_ipwhois_generic_exception(
     with pytest.raises(RuntimeError, match="Unexpected failure"):
         mock_ipwhois.side_effect = RuntimeError("Unexpected failure")
 
-        cache: Dict[str, str] = {}
-        get_cidr_ipwhois("10.0.0.1", cache)
-        assert "10.0.0.1" not in cache
+        get_cidr_ipwhois("10.0.0.1")
 
 
 @pytest.fixture
@@ -222,7 +208,7 @@ def test_aggregate_ips_all_cidr(
     ips: List[str] = ["1.2.3.0/24", "5.6.7.0/24"]
     mock_is_cidr.side_effect = lambda ip: True
 
-    result: Tuple[List[str], List[str]] = aggregate_ips(ips, {})
+    result: Tuple[List[str], List[str]] = aggregate_ips(ips, {}, "file.json")
     assert set(result[0]) == {"1.2.3.0/24", "5.6.7.0/24"}
     assert result[1] == []
     mock_get_cidr_ipwhois.assert_not_called()
@@ -236,7 +222,8 @@ def test_aggregate_ips_all_resolvable_ips(
     mock_get_cidr_ipwhois.side_effect = ["8.8.8.0/24", "1.1.1.0/24"]
 
     cache: Dict[str, str] = {}
-    result: Tuple[List[str], List[str]] = aggregate_ips(ips, cache)
+    result: Tuple[List[str], List[str]] = aggregate_ips(
+        ips, cache, "file.json")
     assert set(result[0]) == {"8.8.8.0/24", "1.1.1.0/24"}
     assert result[1] == []
 
@@ -249,7 +236,8 @@ def test_aggregate_ips_mixed_inputs(
     mock_get_cidr_ipwhois.return_value = "9.9.9.0/24"
 
     cache: Dict[str, str] = {}
-    result: Tuple[List[str], List[str]] = aggregate_ips(ips, cache)
+    result: Tuple[List[str], List[str]] = aggregate_ips(
+        ips, cache, "file.json")
     assert set(result[0]) == {"1.2.3.0/24", "9.9.9.0/24"}
     assert result[1] == []
 
@@ -262,7 +250,8 @@ def test_aggregate_ips_unresolvable_ips(
     mock_get_cidr_ipwhois.side_effect = [None, None]
 
     cache: Dict[str, str] = {}
-    result: Tuple[List[str], List[str]] = aggregate_ips(ips, cache)
+    result: Tuple[List[str], List[str]] = aggregate_ips(
+        ips, cache, "file.json")
     assert result[0] == []
     assert set(result[1]) == {"10.0.0.1", "172.16.0.1"}
 
@@ -275,7 +264,8 @@ def test_aggregate_ips_duplicate_cidrs(
     mock_get_cidr_ipwhois.return_value = "1.2.3.0/24"
 
     cache: Dict[str, str] = {}
-    result: Tuple[List[str], List[str]] = aggregate_ips(ips, cache)
+    result: Tuple[List[str], List[str]] = aggregate_ips(
+        ips, cache, "file.json")
     assert result[0] == ["1.2.3.0/24"]
     assert result[1] == []
 
@@ -375,7 +365,8 @@ def test_main_all_resolved(
     main(ips)
 
     mock_load_cache.assert_called_once()
-    mock_aggregate_ips.assert_called_once_with(ips, {"cached": "value"})
+    mock_aggregate_ips.assert_called_once_with(
+        ips, {"cached": "value"}, CACHE_FILE)
     mock_save_cache.assert_called_once_with({"cached": "value"}, CACHE_FILE)
     mock_format_block_line.assert_any_call("1.2.3.0/24")
     mock_format_block_line.assert_any_call("5.6.7.0/24")

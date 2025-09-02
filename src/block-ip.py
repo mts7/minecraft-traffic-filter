@@ -29,6 +29,7 @@ def reload_pfctl() -> None:
 
 
 def main() -> None:
+    # TODO: refactor to lower line count
     if not is_root():
         print("This script must be run as root. "
               "Use 'sudo python block_ip.py <ip>'")

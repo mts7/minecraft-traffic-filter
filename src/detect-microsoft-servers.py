@@ -32,6 +32,7 @@ def ping(ip: str) -> bool:
 
 
 def main():
+    # TODO: refactor to lower cyclomatic complexity
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"Connectivity Check - {timestamp}\n")
     unreachable = []

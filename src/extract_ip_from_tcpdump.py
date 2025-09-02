@@ -36,6 +36,7 @@ def run_tcpdump() -> None:
     """
     Executes the tcpdump command and prints destination IPs from output.
     """
+    # TODO: refactor to lower cyclomatic complexity
     host = os.getenv("IP_ADDRESS", "")
     try:
         ipaddress.ip_address(host)

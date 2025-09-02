@@ -1,14 +1,17 @@
 import ipaddress
 import json
 import os
+import time
 
 from ipwhois import IPWhois  # type: ignore[import-untyped]
-from ipwhois.exceptions import IPDefinedError  # type: ignore[import-untyped]
+from ipwhois.exceptions import (  # type: ignore[import-untyped]
+    ASNRegistryError, HTTPLookupError, IPDefinedError)
 
 CACHE_FILE = "cache_rdap.json"
 
 
 def load_cache(path: str) -> dict[str, str]:
+    # TODO: refactor to lower cyclomatic complexity
     if not os.path.exists(path):
         return {}
     with open(path, "r") as f:
@@ -30,49 +33,79 @@ def save_cache(cache_contents: dict[str, str], path: str):
 
 
 def get_cidr_ipwhois(
-        ip_address: str, cache_values: dict[str, str]) -> str:
-    if ip_address in cache_values:
-        print(f"found {ip_address} in cache")
-        return cache_values[ip_address]
-
+        ip_address: str
+) -> str:
     try:
         # TODO: use dependency injection
         obj = IPWhois(ip_address)
         result = obj.lookup_rdap(depth=1)
         cidr = result.get("asn_cidr")
-        if cidr:
-            cache_values[ip_address] = cidr
         print(ip_address, cidr)
         return cidr
     except IPDefinedError as e:
         print(f"IPDefinedError with {e}")
         raise
     except Exception as e:
-        print(f"Unknown exception: {e}")
+        print(f"Unknown exception: {type(e).__name__}: {e}")
         raise
 
 
 def aggregate_ips(
-    ips: list[str], cache_values: dict[str, str]
+        ips: list[str],
+        cache_values: dict[str, str],
+        cache_path: str,
+        batch_size: int = 10,
+        delay_seconds: int = 8
 ) -> tuple[list[str], list[str]]:
+    # TODO: refactor to lower cyclomatic complexity
     unresolved_ips = []
     result = []
+    requests = 0
 
     for ip_address in ips:
         if is_cidr(ip_address):
             cidr = ip_address
         else:
-            cidr = get_cidr_ipwhois(ip_address, cache_values)
+            cidr, requests = get_cidr(
+                ip_address, cache_values, cache_path, requests)
+
         if cidr:
             result.append(cidr)
         else:
             unresolved_ips.append(ip_address)
 
-    return list(set(result)), unresolved_ips
+        if requests > 0 and requests % batch_size == 0:
+            time.sleep(delay_seconds)
+
+    return list(dict.fromkeys(result)), unresolved_ips
 
 
 def format_block_line(cidr: str) -> str:
     return f"block drop from {cidr} to any"
+
+
+def get_cidr(
+    ip_address: str,
+    cache_values: dict[str, str],
+    cache_path: str,
+    requests: int
+) -> tuple[str, int]:
+    # TODO: refactor to lower parameter count
+    try:
+        if ip_address in cache_values:
+            print(f"found {ip_address} in cache")
+            return cache_values[ip_address], requests
+        else:
+            cidr = get_cidr_ipwhois(ip_address)
+            cache_values[ip_address] = cidr
+            save_cache(cache_values, cache_path)
+            return cidr, requests + 1
+    except (HTTPLookupError, ASNRegistryError, ConnectionResetError) as e:
+        print(f"Recoverable error for {ip_address}: {type(e).__name__}: {e}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error for {ip_address}: {type(e).__name__}: {e}")
+        raise
 
 
 def is_cidr(ip_address: str) -> bool:
@@ -86,7 +119,7 @@ def is_cidr(ip_address: str) -> bool:
 
 def main(ips: list[str]) -> None:
     cache = load_cache(CACHE_FILE)
-    aggregated, failed = aggregate_ips(ips, cache)
+    aggregated, failed = aggregate_ips(ips, cache, CACHE_FILE)
     save_cache(cache, CACHE_FILE)
 
     print("\n✅ Aggregated CIDRs and IPs:")
@@ -242,6 +275,25 @@ if __name__ == "__main__":
         # "205.210.171.2",
         # "206.168.34.77",
         # "217.144.184.3",
+        "9.234.8.54",
+        "20.14.89.71",
+        "20.150.195.172",
+        "45.55.185.224",
+        "89.213.174.77",
+        "103.108.231.59",
+        "107.170.65.169",
+        "135.119.88.104",
+        "146.190.156.6",
+        "149.22.91.88",
+        "149.88.20.202",
+        "149.88.20.215",
+        "185.77.218.11",
+        "185.195.232.147",
+        "185.195.233.155",
+        "185.254.75.52",
+        "198.44.129.53",
+        "198.44.129.117",
+        "208.131.130.75",
     ]
 
     main(ip_list)
