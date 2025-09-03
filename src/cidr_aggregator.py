@@ -1,5 +1,4 @@
 import ipaddress
-import json
 import os
 import time
 
@@ -7,29 +6,10 @@ from ipwhois import IPWhois  # type: ignore[import-untyped]
 from ipwhois.exceptions import (  # type: ignore[import-untyped]
     ASNRegistryError, HTTPLookupError, IPDefinedError)
 
-CACHE_FILE = "cache_rdap.json"
+from utilities.FileCache import FileCache
 
-
-def load_cache(path: str) -> dict[str, str]:
-    # TODO: refactor to lower cyclomatic complexity
-    if not os.path.exists(path):
-        return {}
-    with open(path, "r") as f:
-        data = json.load(f)
-
-    if not isinstance(data, dict):
-        raise TypeError("Expected dict[str, str] in cache.json")
-
-    for k, v in data.items():
-        if not isinstance(k, str) or not isinstance(v, str):
-            raise TypeError("Cache must contain str-to-str mappings")
-
-    return data
-
-
-def save_cache(cache_contents: dict[str, str], path: str):
-    with open(path, "w") as f:
-        json.dump(cache_contents, f, indent=2)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+CACHE_FILE = os.path.join(script_dir, "cache_rdap.json")
 
 
 def get_cidr_ipwhois(
@@ -52,8 +32,7 @@ def get_cidr_ipwhois(
 
 def aggregate_ips(
         ips: list[str],
-        cache_values: dict[str, str],
-        cache_path: str,
+        cache: FileCache[str, str],
         batch_size: int = 10,
         delay_seconds: int = 8
 ) -> tuple[list[str], list[str]]:
@@ -66,8 +45,7 @@ def aggregate_ips(
         if is_cidr(ip_address):
             cidr = ip_address
         else:
-            cidr, requests = get_cidr(
-                ip_address, cache_values, cache_path, requests)
+            cidr, requests = get_cidr(ip_address, cache, requests)
 
         if cidr:
             result.append(cidr)
@@ -86,19 +64,16 @@ def format_block_line(cidr: str) -> str:
 
 def get_cidr(
     ip_address: str,
-    cache_values: dict[str, str],
-    cache_path: str,
+    cache: FileCache[str, str],
     requests: int
 ) -> tuple[str, int]:
-    # TODO: refactor to lower parameter count
     try:
-        if ip_address in cache_values:
+        if ip_address in cache:
             print(f"found {ip_address} in cache")
-            return cache_values[ip_address], requests
+            return cache[ip_address], requests
         else:
             cidr = get_cidr_ipwhois(ip_address)
-            cache_values[ip_address] = cidr
-            save_cache(cache_values, cache_path)
+            cache[ip_address] = cidr
             return cidr, requests + 1
     except (HTTPLookupError, ASNRegistryError, ConnectionResetError) as e:
         print(f"Recoverable error for {ip_address}: {type(e).__name__}: {e}")
@@ -117,10 +92,8 @@ def is_cidr(ip_address: str) -> bool:
         return False
 
 
-def main(ips: list[str]) -> None:
-    cache = load_cache(CACHE_FILE)
-    aggregated, failed = aggregate_ips(ips, cache, CACHE_FILE)
-    save_cache(cache, CACHE_FILE)
+def main(ips: list[str], cache: FileCache[str, str]) -> None:
+    aggregated, failed = aggregate_ips(ips, cache)
 
     print("\n✅ Aggregated CIDRs and IPs:")
     for entry in sorted(aggregated):
@@ -133,6 +106,8 @@ def main(ips: list[str]) -> None:
 
 
 if __name__ == "__main__":
+    ip_cache = FileCache[str, str](CACHE_FILE)
+
     ip_list: list[str] = [
         # "20.14.73.238",
         # "20.65.193.35",
@@ -296,4 +271,4 @@ if __name__ == "__main__":
         "208.131.130.75",
     ]
 
-    main(ip_list)
+    main(ip_list, ip_cache)

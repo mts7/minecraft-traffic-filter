@@ -1,134 +1,10 @@
-import builtins
-import json
 from typing import Dict, List, Tuple
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from cidr_aggregator import (CACHE_FILE, aggregate_ips, format_block_line,
-                             get_cidr_ipwhois, is_cidr, load_cache, main,
-                             save_cache)
-
-
-@patch("os.path.exists", return_value=False)
-def test_load_cache_file_missing(mock_exists: MagicMock) -> None:
-    result: Dict[str, str] = load_cache("file.json")
-    assert result == {}
-    mock_exists.assert_called_once()
-
-
-@patch("os.path.exists", return_value=True)
-@patch("builtins.open", new_callable=mock_open, read_data='{"a": "b"}')
-def test_load_cache_valid_json(
-    mock_open_fn: MagicMock,
-    mock_exists: MagicMock
-) -> None:
-    result: Dict[str, str] = load_cache("file.json")
-    assert result == {"a": "b"}
-    mock_open_fn.assert_called_once()
-    mock_exists.assert_called_once()
-
-
-@patch("os.path.exists", return_value=True)
-@patch("builtins.open", new_callable=mock_open, read_data="not json")
-def test_load_cache_invalid_json_raises(
-    _mock_open_fn: MagicMock,
-    _mock_exists: MagicMock
-) -> None:
-    with pytest.raises(json.JSONDecodeError):
-        load_cache("file.json")
-
-
-@patch("os.path.exists", return_value=True)
-@patch("builtins.open", new_callable=mock_open, read_data="42")
-def test_load_cache_non_dict_json_raises(
-    _mock_open_fn: MagicMock,
-    _mock_exists: MagicMock
-) -> None:
-    with pytest.raises(TypeError):
-        load_cache("file.json")
-
-
-@patch("os.path.exists", return_value=True)
-@patch("builtins.open", side_effect=OSError("Permission denied"))
-def test_load_cache_open_failure_raises(
-    _mock_open_fn: MagicMock,
-    _mock_exists: MagicMock
-) -> None:
-    with pytest.raises(OSError):
-        load_cache("file.json")
-
-
-@patch("os.path.exists", return_value=True)
-@patch("builtins.open", new_callable=mock_open, read_data='{"a": 1}')
-def test_load_cache_non_str_values_not_allowed(
-    _mock_open_fn: MagicMock,
-    _mock_exists: MagicMock
-) -> None:
-    with pytest.raises(TypeError):
-        load_cache("file.json")
-
-
-@pytest.fixture
-def mock_json_dump():
-    with patch.object(json, "dump") as m:
-        yield m
-
-
-@pytest.fixture
-def mock_open_fixture():
-    with patch.object(builtins, "open", create=True) as m:
-        yield m
-
-
-def test_save_cache_valid_dict(
-    mock_open_fixture: MagicMock, mock_json_dump: MagicMock
-) -> None:
-    cache = {"key": "value"}
-    save_cache(cache, "file.json")
-    mock_open_fixture.assert_called_once_with("file.json", "w")
-    mock_json_dump.assert_called_once_with(
-        cache,
-        mock_open_fixture.return_value.__enter__(),
-        indent=2)
-
-
-def test_save_cache_empty_dict(
-    mock_open_fixture: MagicMock, mock_json_dump: MagicMock
-) -> None:
-    cache: dict[str, str] = {}
-    save_cache(cache, "file.json")
-    mock_json_dump.assert_called_once_with(
-        cache,
-        mock_open_fixture.return_value.__enter__(),
-        indent=2)
-
-
-def test_save_cache_list_input(
-    mock_open_fixture: MagicMock, mock_json_dump: MagicMock
-) -> None:
-    cache = [1, 2, 3]
-    save_cache(cache, "file.json")  # type: ignore
-    mock_json_dump.assert_called_once_with(
-        cache,
-        mock_open_fixture.return_value.__enter__(),
-        indent=2)
-
-
-def test_save_cache_invalid_type_raises(
-    mock_open_fixture: MagicMock, mock_json_dump: MagicMock
-) -> None:
-    mock_json_dump.side_effect = TypeError("Not serializable")
-    with pytest.raises(TypeError, match="Not serializable"):
-        save_cache(object(), "file.json")  # type: ignore
-
-
-def test_save_cache_file_write_error(
-    mock_open_fixture: MagicMock
-) -> None:
-    mock_open_fixture.side_effect = IOError("Disk full")
-    with pytest.raises(IOError, match="Disk full"):
-        save_cache({"key": "value"}, "file.json")
+                             get_cidr_ipwhois, is_cidr, main)
 
 
 @pytest.fixture
@@ -348,39 +224,29 @@ def test_is_cidr_ipv6_single_address() -> None:
 
 
 @patch("cidr_aggregator.format_block_line")
-@patch("cidr_aggregator.save_cache")
 @patch("cidr_aggregator.aggregate_ips")
-@patch("cidr_aggregator.load_cache")
 def test_main_all_resolved(
-    mock_load_cache: MagicMock,
     mock_aggregate_ips: MagicMock,
-    mock_save_cache: MagicMock,
     mock_format_block_line: MagicMock
 ) -> None:
-    mock_load_cache.return_value = {"cached": "value"}
     mock_aggregate_ips.return_value = (["1.2.3.0/24", "5.6.7.0/24"], [])
     mock_format_block_line.side_effect = lambda cidr: f"block {cidr}"
 
     ips: List[str] = ["1.2.3.4", "5.6.7.8"]
     main(ips)
 
-    mock_load_cache.assert_called_once()
     mock_aggregate_ips.assert_called_once_with(
         ips, {"cached": "value"}, CACHE_FILE)
-    mock_save_cache.assert_called_once_with({"cached": "value"}, CACHE_FILE)
     mock_format_block_line.assert_any_call("1.2.3.0/24")
     mock_format_block_line.assert_any_call("5.6.7.0/24")
 
 
 @patch("cidr_aggregator.format_block_line")
 @patch("cidr_aggregator.aggregate_ips")
-@patch("cidr_aggregator.load_cache")
 def test_main_with_unresolved_ips(
-    mock_load_cache: MagicMock,
     mock_aggregate_ips: MagicMock,
     mock_format_block_line: MagicMock
 ) -> None:
-    mock_load_cache.return_value = {}
     mock_aggregate_ips.return_value = (["8.8.8.0/24"], ["10.0.0.1"])
     mock_format_block_line.side_effect = lambda x: f"block {x}"
 
@@ -392,20 +258,14 @@ def test_main_with_unresolved_ips(
 
 
 @patch("cidr_aggregator.format_block_line")
-@patch("cidr_aggregator.save_cache")
 @patch("cidr_aggregator.aggregate_ips")
-@patch("cidr_aggregator.load_cache")
 def test_main_empty_input(
-    mock_load_cache: MagicMock,
     mock_aggregate_ips: MagicMock,
-    mock_save_cache: MagicMock,
     mock_format_block_line: MagicMock
 ) -> None:
-    mock_load_cache.return_value = {}
     mock_aggregate_ips.return_value = ([], [])
     ips: List[str] = []
 
     main(ips)
 
     mock_format_block_line.assert_not_called()
-    mock_save_cache.assert_called_once_with({}, CACHE_FILE)
