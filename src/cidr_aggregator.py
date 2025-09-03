@@ -12,11 +12,16 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 CACHE_FILE = os.path.join(script_dir, "cache_rdap.json")
 
 
+def check_throttle(requests: int, size: int, delay: int) -> None:
+    if requests % size == 0 and requests > 0:
+        time.sleep(delay)
+
+
 def get_cidr_ipwhois(
         ip_address: str
 ) -> str:
     try:
-        # TODO: use dependency injection
+        # TODO: use dependency injection with factory pattern
         obj = IPWhois(ip_address)
         result = obj.lookup_rdap(depth=1)
         cidr = result.get("asn_cidr")
@@ -36,24 +41,18 @@ def aggregate_ips(
         batch_size: int = 10,
         delay_seconds: int = 8
 ) -> tuple[list[str], list[str]]:
-    # TODO: refactor to lower cyclomatic complexity
     unresolved_ips = []
     result = []
     requests = 0
 
     for ip_address in ips:
-        if is_cidr(ip_address):
-            cidr = ip_address
-        else:
-            cidr, requests = get_cidr(ip_address, cache, requests)
-
+        cidr = resolve_ip(ip_address, requests, cache)
         if cidr:
             result.append(cidr)
         else:
             unresolved_ips.append(ip_address)
 
-        if requests > 0 and requests % batch_size == 0:
-            time.sleep(delay_seconds)
+        check_throttle(requests, batch_size, delay_seconds)
 
     return list(dict.fromkeys(result)), unresolved_ips
 
@@ -90,6 +89,12 @@ def is_cidr(ip_address: str) -> bool:
     except ValueError as e:
         print(f"ValueError: {e}")
         return False
+
+
+def resolve_ip(ip_address: str, requests: int, cache: FileCache[str, str]) -> tuple[str, int]:
+    if is_cidr(ip_address):
+        return ip_address, requests
+    return get_cidr(ip_address, cache, requests)
 
 
 def main(ips: list[str], cache: FileCache[str, str]) -> None:
