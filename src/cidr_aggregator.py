@@ -1,104 +1,16 @@
-import ipaddress
 import os
-import time
 
-from ipwhois import IPWhois  # type: ignore[import-untyped]
-from ipwhois.exceptions import (  # type: ignore[import-untyped]
-    ASNRegistryError, HTTPLookupError, IPDefinedError)
-
-from utilities.FileCache import FileCache
+from cidr_resolver import CidrResolver
+from utilities.file_cache import FileCache
+from utilities.network import format_block_line
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 CACHE_FILE = os.path.join(script_dir, "cache_rdap.json")
 
 
-def check_throttle(requests: int, size: int, delay: int) -> None:
-    if requests % size == 0 and requests > 0:
-        time.sleep(delay)
-
-
-def get_cidr_ipwhois(
-        ip_address: str
-) -> str:
-    try:
-        # TODO: use dependency injection with factory pattern
-        obj = IPWhois(ip_address)
-        result = obj.lookup_rdap(depth=1)
-        cidr = result.get("asn_cidr")
-        print(ip_address, cidr)
-        return cidr
-    except IPDefinedError as e:
-        print(f"IPDefinedError with {e}")
-        raise
-    except Exception as e:
-        print(f"Unknown exception: {type(e).__name__}: {e}")
-        raise
-
-
-def aggregate_ips(
-        ips: list[str],
-        cache: FileCache[str, str],
-        batch_size: int = 10,
-        delay_seconds: int = 8
-) -> tuple[list[str], list[str]]:
-    unresolved_ips = []
-    result = []
-    requests = 0
-
-    for ip_address in ips:
-        cidr = resolve_ip(ip_address, requests, cache)
-        if cidr:
-            result.append(cidr)
-        else:
-            unresolved_ips.append(ip_address)
-
-        check_throttle(requests, batch_size, delay_seconds)
-
-    return list(dict.fromkeys(result)), unresolved_ips
-
-
-def format_block_line(cidr: str) -> str:
-    return f"block drop from {cidr} to any"
-
-
-def get_cidr(
-    ip_address: str,
-    cache: FileCache[str, str],
-    requests: int
-) -> tuple[str, int]:
-    try:
-        if ip_address in cache:
-            print(f"found {ip_address} in cache")
-            return cache[ip_address], requests
-        else:
-            cidr = get_cidr_ipwhois(ip_address)
-            cache[ip_address] = cidr
-            return cidr, requests + 1
-    except (HTTPLookupError, ASNRegistryError, ConnectionResetError) as e:
-        print(f"Recoverable error for {ip_address}: {type(e).__name__}: {e}")
-        raise
-    except Exception as e:
-        print(f"Unexpected error for {ip_address}: {type(e).__name__}: {e}")
-        raise
-
-
-def is_cidr(ip_address: str) -> bool:
-    try:
-        ipaddress.ip_network(ip_address, strict=False)
-        return '/' in ip_address
-    except ValueError as e:
-        print(f"ValueError: {e}")
-        return False
-
-
-def resolve_ip(ip_address: str, requests: int, cache: FileCache[str, str]) -> tuple[str, int]:
-    if is_cidr(ip_address):
-        return ip_address, requests
-    return get_cidr(ip_address, cache, requests)
-
-
 def main(ips: list[str], cache: FileCache[str, str]) -> None:
-    aggregated, failed = aggregate_ips(ips, cache)
+    resolver = CidrResolver(cache)
+    aggregated, failed = resolver.aggregate_ips(ips)
 
     print("\n✅ Aggregated CIDRs and IPs:")
     for entry in sorted(aggregated):
