@@ -3,15 +3,17 @@ import time
 from ipwhois import ASNRegistryError, HTTPLookupError
 
 from utilities.file_cache import FileCache
-from utilities.network import get_cidr_ipwhois, is_cidr
+from utilities.network import WhoisStrategy, is_cidr
 
 
 class CidrResolver:
-    def __init__(self, cache: FileCache[str, str]):
+    def __init__(self, cache: FileCache[str, str],
+                 whois_strategy: WhoisStrategy):
         self.cache = cache
         self.requests = 0
         self.batch_size = 10
         self.delay = 5
+        self.whois_strategy = whois_strategy
 
     def get_cidr(self, ip_address: str) -> str:
         """Get CIDR from cache or lookup if not cached."""
@@ -20,7 +22,7 @@ class CidrResolver:
                 print(f"found {ip_address} in cache")
                 return self.cache[ip_address]
 
-            cidr = get_cidr_ipwhois(ip_address)
+            cidr = self.whois_strategy.get_cidr(ip_address)
             self.cache[ip_address] = cidr
             self.requests += 1
             return cidr

@@ -1,23 +1,29 @@
 import ipaddress
 
-from ipwhois import IPDefinedError, IPWhois
+from ipwhois import IPDefinedError
 
 
-def get_cidr_ipwhois(ip_address: str) -> str:
-    """Call IPWhois RDAP lookup and return the ASN CIDR."""
-    try:
-        # TODO: use dependency injection with factory pattern
-        obj = IPWhois(ip_address)
-        result = obj.lookup_rdap(depth=1)
-        cidr = result.get("asn_cidr")
-        print(ip_address, cidr)
-        return cidr
-    except IPDefinedError as e:
-        print(f"IPDefinedError with {e}")
-        raise
-    except Exception as e:
-        print(f"Unknown exception: {type(e).__name__}: {e}")
-        raise
+class WhoisStrategy:
+    def __init__(self, whois_factory):
+        """
+        whois_factory: callable, e.g. IPWhois or a mock for testing
+        """
+        self.whois_factory = whois_factory
+
+    def get_cidr(self, ip_address: str) -> str:
+        """Call IPWhois RDAP lookup and return the ASN CIDR."""
+        try:
+            obj = self.whois_factory(ip_address)
+            result = obj.lookup_rdap(depth=1)
+            cidr = result.get("asn_cidr")
+            print(ip_address, cidr)
+            return cidr
+        except IPDefinedError as e:
+            print(f"IPDefinedError with {e}")
+            raise
+        except Exception as e:
+            print(f"Unknown exception: {type(e).__name__}: {e}")
+            raise
 
 
 def is_cidr(ip_address: str) -> bool:
