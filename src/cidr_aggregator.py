@@ -1,6 +1,6 @@
 import os
 
-from ipwhois import IPWhois
+from ipwhois import IPWhois  # type: ignore
 
 from cidr_resolver import CidrResolver
 from utilities.file_cache import FileCache

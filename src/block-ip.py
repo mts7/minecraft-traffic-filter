@@ -6,6 +6,10 @@ import sys
 PF_CONF_PATH = "/etc/pf.conf"
 
 
+class BlockIPError(Exception):
+    pass
+
+
 def is_root() -> bool:
     return os.geteuid() == 0
 
@@ -28,21 +32,17 @@ def reload_pfctl() -> None:
                    shell=False)  # nosec[B603]
 
 
-def main() -> None:
-    # TODO: refactor to lower line count
+def run_block_ip(argv: list[str]) -> None:
     if not is_root():
-        print("This script must be run as root. "
-              "Use 'sudo python block_ip.py <ip>'")
-        sys.exit(1)
+        raise BlockIPError("This script must be run as root. "
+                           "Use 'sudo python block_ip.py <ip>'")
 
-    if len(sys.argv) != 2:
-        print("Usage: python block_ip.py <ip_address_or_subnet>")
-        sys.exit(1)
+    if len(argv) != 2:
+        raise BlockIPError("Usage: python block_ip.py <ip_address_or_subnet>")
 
-    ip = sys.argv[1]
+    ip = argv[1]
     if not validate_ip(ip):
-        print(f"Invalid IP format: {ip}")
-        sys.exit(1)
+        raise BlockIPError(f"Invalid IP format: {ip}")
 
     print(f"Adding block rule for {ip} to {PF_CONF_PATH}...")
     append_pf_rule(ip)
@@ -52,5 +52,13 @@ def main() -> None:
     subprocess.run(["/bin/cat", PF_CONF_PATH], shell=False)  # nosec[B603]
 
 
+def main() -> None:
+    run_block_ip(sys.argv)
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BlockIPError as e:
+        print(e)
+        sys.exit(1)

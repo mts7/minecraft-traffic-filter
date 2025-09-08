@@ -1,6 +1,6 @@
 import ipaddress
 
-from ipwhois import IPDefinedError
+from ipwhois import IPDefinedError  # type: ignore
 
 
 class WhoisStrategy:

@@ -1,6 +1,6 @@
 import time
 
-from ipwhois import ASNRegistryError, HTTPLookupError
+from ipwhois import ASNRegistryError, HTTPLookupError  # type: ignore
 
 from utilities.file_cache import FileCache
 from utilities.network import WhoisStrategy, is_cidr

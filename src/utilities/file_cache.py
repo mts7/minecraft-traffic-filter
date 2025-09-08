@@ -25,7 +25,7 @@ class FileCache(Generic[K, V]):
                     self._cache = {}
 
     def _parse_key(self, key: str) -> K:
-        return key  # override if K ≠ str
+        return key  # type: ignore
 
     def get(self, key: K) -> Optional[V]:
         return self._cache.get(key)
