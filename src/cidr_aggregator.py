@@ -25,7 +25,7 @@ def main(ips: list[str], cache: FileCache[str, str],
             print(format_block_line(ip))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     ip_cache = FileCache[str, str](CACHE_FILE)
     whois_strategy = WhoisStrategy(IPWhois)
 

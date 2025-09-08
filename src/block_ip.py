@@ -1,5 +1,5 @@
+import ipaddress
 import os
-import re
 import subprocess  # nosec[B404]
 import sys
 
@@ -15,8 +15,11 @@ def is_root() -> bool:
 
 
 def validate_ip(ip: str) -> bool:
-    pattern = r"^\d{1,3}(\.\d{1,3}){3}(/(\d|[12]\d|3[0-2]))?$"
-    return re.match(pattern, ip) is not None
+    try:
+        ipaddress.ip_network(ip, strict=False)
+        return True
+    except ValueError:
+        return False
 
 
 def append_pf_rule(ip: str) -> None:
@@ -56,7 +59,7 @@ def main() -> None:
     run_block_ip(sys.argv)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     try:
         main()
     except BlockIPError as e:

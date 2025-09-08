@@ -103,11 +103,11 @@ def test_run_tcpdump_invalid_ip_raises() -> None:
 @patch("extract_ip_from_tcpdump.extract_destination_ip",
        return_value="10.0.0.1")
 @patch("extract_ip_from_tcpdump.should_track_ip", return_value=True)
-@patch("extract_ip_from_tcpdump.track_ip")
+@patch("extract_ip_from_tcpdump.process_tcpdump_output")
 @patch("subprocess.Popen")
 def test_run_tcpdump_valid_ip_executes(
     mock_popen: MagicMock,
-    mock_track_ip: MagicMock,
+    mock_process_tcpdump_output: MagicMock,
     *_: MagicMock
 ) -> None:
     mock_proc = MagicMock()
@@ -117,7 +117,8 @@ def test_run_tcpdump_valid_ip_executes(
     run_tcpdump()
 
     mock_popen.assert_called_once()
-    mock_track_ip.assert_called_once_with("10.0.0.1", set(), LOG_FILE)
+    mock_process_tcpdump_output.assert_called_once_with(
+        mock_proc, {"10.0.0.1"}, LOG_FILE)
 
 
 @patch.dict(os.environ, {"IP_ADDRESS": "192.168.1.1"})
