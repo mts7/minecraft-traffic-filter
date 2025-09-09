@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 from block_ip import (PF_CONF_PATH, BlockIPError, append_pf_rule, is_root,
-                      reload_pfctl, run_block_ip, validate_ip)
+                      main, reload_pfctl, run_block_ip, validate_ip)
 
 
 def test_is_root_true(monkeypatch) -> None:
@@ -96,3 +96,11 @@ def test_run_block_ip_success(monkeypatch) -> None:
         ["/bin/cat", PF_CONF_PATH],
         shell=False
     )
+
+
+def test_main_invokes_run_block_ip(monkeypatch) -> None:
+    mock_run = patch("block_ip.run_block_ip").start()
+    monkeypatch.setattr("sys.argv", ["block_ip.py", "192.0.2.1"])
+    main()
+    mock_run.assert_called_once_with(["block_ip.py", "192.0.2.1"])
+    patch.stopall()

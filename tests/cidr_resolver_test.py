@@ -134,3 +134,21 @@ def test_check_throttle_does_not_trigger_sleep() -> None:
     with patch("time.sleep") as mock_sleep:
         check_throttle(9, 10, 5)
         mock_sleep.assert_not_called()
+
+
+@pytest.mark.parametrize("falsy_value", [None, "", False])
+def test_aggregate_ips_else_branch_on_falsy_values(
+    falsy_value: str | None | bool,
+    monkeypatch
+) -> None:
+    mock_cache = MagicMock()
+    mock_strategy = MagicMock()
+    resolver = CidrResolver(mock_cache, mock_strategy)
+
+    monkeypatch.setattr(resolver, "resolve_ip", lambda ip: falsy_value)
+
+    with patch("cidr_resolver.check_throttle") as _:
+        result, failed = resolver.aggregate_ips(["192.0.2.1"])
+
+    assert result == []
+    assert failed == ["192.0.2.1"]

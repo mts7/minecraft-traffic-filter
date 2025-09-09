@@ -22,6 +22,10 @@ def check_domain(domain: str) -> tuple[str, str, bool]:
     return domain, ip, reachable
 
 
+def output(message: str) -> None:
+    print(message)
+
+
 def ping(ip: str) -> bool:
     try:
         result = subprocess.run(
@@ -36,24 +40,24 @@ def ping(ip: str) -> bool:
 
 def print_header() -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"Connectivity Check - {timestamp}\n")
+    output(f"Connectivity Check - {timestamp}\n")
 
 
 def print_result(domain: str, ip_or_msg: str, reachable: bool) -> None:
     if ip_or_msg == "Resolution failed":
-        print(f"{domain:<30} | {ip_or_msg}")
+        output(f"{domain:<30} | {ip_or_msg}")
     else:
         status = "reachable" if reachable else "unreachable"
-        print(f"{domain:<30} | {ip_or_msg:<15} | {status}")
+        output(f"{domain:<30} | {ip_or_msg:<15} | {status}")
 
 
 def print_summary(unreachable: list[str]) -> None:
     if unreachable:
-        print("\nUnreachable Domains:")
+        output("\nUnreachable Domains:")
         for domain in unreachable:
-            print(f"- {domain}")
+            output(f"- {domain}")
     else:
-        print("\n✅ All domains reachable.")
+        output("\n✅ All domains reachable.")
 
 
 def resolve_domain(domain: str) -> str | None:
@@ -70,11 +74,11 @@ def validate_ip(ip: str) -> None:
         raise ValueError(f"Invalid IP address: {ip}")
 
 
-def main() -> None:
+def main(domains: list[str]) -> None:
     print_header()
     unreachable: list[str] = []
 
-    for domain in DOMAINS:
+    for domain in domains:
         domain, ip_or_msg, reachable = check_domain(domain)
         print_result(domain, ip_or_msg, reachable)
         if not reachable:
@@ -84,4 +88,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    main()
+    main(DOMAINS)

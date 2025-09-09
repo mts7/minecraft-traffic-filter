@@ -6,8 +6,9 @@ from unittest.mock import MagicMock, mock_open, patch
 import pytest
 
 from extract_ip_from_tcpdump import (LOG_FILE, extract_destination_ip,
-                                     load_allowed_ips, run_tcpdump,
-                                     should_track_ip, track_ip)
+                                     load_allowed_ips, process_tcpdump_output,
+                                     run_tcpdump, should_track_ip, track_ip,
+                                     validate_ip_for_tracking)
 
 
 @pytest.mark.parametrize(
@@ -188,3 +189,140 @@ def test_track_ip_adds_and_writes() -> None:
     assert ip in tracked
     m.assert_called_once_with(log_file, "a")
     m().write.assert_called_once_with(f"{ip}\n")
+
+
+def make_mock_process(lines: list[str]) -> MagicMock:
+    mock_process = MagicMock()
+    mock_process.stdout = iter(lines)
+    return mock_process
+
+
+def test_process_tcpdump_output_raises_if_stdout_none() -> None:
+    mock_process = MagicMock()
+    mock_process.stdout = None
+    with pytest.raises(RuntimeError,
+                       match="Expected process.stdout to be non-None"):
+        process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+
+
+def test_process_tcpdump_output_tracks_valid_ip(monkeypatch) -> None:
+    mock_process = make_mock_process(["line1"])
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.extract_destination_ip",
+                        lambda line: "192.0.2.1")
+    monkeypatch.setattr("extract_ip_from_tcpdump.validate_ip_for_tracking",
+                        lambda ip, tracked, allowed: ip)
+    mock_track = MagicMock()
+    monkeypatch.setattr("extract_ip_from_tcpdump.track_ip", mock_track)
+
+    process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+    mock_track.assert_called_once_with("192.0.2.1", set(), "log.txt")
+
+
+def test_process_tcpdump_output_skips_invalid_ip(monkeypatch) -> None:
+    mock_process = make_mock_process(["line1"])
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.extract_destination_ip",
+                        lambda line: "invalid")
+    monkeypatch.setattr("extract_ip_from_tcpdump.validate_ip_for_tracking",
+                        lambda *_: (_ for _ in ()).throw(ValueError("bad ip")))
+    mock_track = MagicMock()
+    monkeypatch.setattr("extract_ip_from_tcpdump.track_ip", mock_track)
+
+    process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+    mock_track.assert_not_called()
+
+
+def test_process_tcpdump_output_skips_already_tracked(monkeypatch) -> None:
+    mock_process = make_mock_process(["line1", "line2"])
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.extract_destination_ip",
+                        lambda line: "192.0.2.1")
+
+    def validator(ip: str, tracked: set[str], _allowed: set[str]) -> str:
+        if ip in tracked:
+            raise ValueError("already tracked")
+        return ip
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.validate_ip_for_tracking",
+                        validator)
+
+    def track(ip: str, tracked: set[str], _log_file: str) -> None:
+        tracked.add(ip)
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.track_ip", track)
+
+    # Patch print to suppress output
+    monkeypatch.setattr("builtins.print", lambda *_: None)
+
+    process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+
+
+def test_process_tcpdump_output_mixed_lines(monkeypatch) -> None:
+    lines = ["line1", "line2", "line3"]
+    mock_process = make_mock_process(lines)
+
+    def extractor(line: str) -> str:
+        return {
+            "line1": "192.0.2.1",
+            "line2": "invalid",
+            "line3": "203.0.113.5"
+        }[line]
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.extract_destination_ip",
+                        extractor)
+
+    def validator(ip: str, _tracked: set[str], allowed: set[str]) -> str:
+        if ip == "invalid":
+            raise ValueError("bad ip")
+        if ip not in allowed:
+            raise ValueError("not allowed")
+        return ip
+
+    monkeypatch.setattr("extract_ip_from_tcpdump.validate_ip_for_tracking",
+                        validator)
+    mock_track = MagicMock()
+    monkeypatch.setattr("extract_ip_from_tcpdump.track_ip", mock_track)
+
+    process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+    mock_track.assert_called_once_with("192.0.2.1", set(), "log.txt")
+
+
+def test_process_tcpdump_output_prints_summary(monkeypatch) -> None:
+    mock_process = make_mock_process(["line1"])
+    monkeypatch.setattr("extract_ip_from_tcpdump.extract_destination_ip",
+                        lambda line: "192.0.2.1")
+    monkeypatch.setattr("extract_ip_from_tcpdump.validate_ip_for_tracking",
+                        lambda ip, tracked, allowed: ip)
+    monkeypatch.setattr("extract_ip_from_tcpdump.track_ip", lambda *_: None)
+
+    mock_print = MagicMock()
+    monkeypatch.setattr("builtins.print", mock_print)
+
+    process_tcpdump_output(mock_process, {"192.0.2.1"}, "log.txt")
+
+    calls = [call[0][0] for call in mock_print.call_args_list]
+    assert any("Retrieved 1 allowed IPs" in msg for msg in calls)
+    assert any("Checking each output line" in msg for msg in calls)
+
+
+def test_validate_ip_for_tracking_none_ip() -> None:
+    with pytest.raises(ValueError, match="No IP extracted"):
+        validate_ip_for_tracking(None, set(), set())
+
+
+def test_validate_ip_for_tracking_already_tracked() -> None:
+    tracked = {"192.0.2.1"}
+    with pytest.raises(ValueError, match="IP already tracked"):
+        validate_ip_for_tracking("192.0.2.1", tracked, set())
+
+
+def test_validate_ip_for_tracking_allowed_ip() -> None:
+    allowed = {"192.0.2.1"}
+    with pytest.raises(ValueError, match="IP is allowed"):
+        validate_ip_for_tracking("192.0.2.1", set(), allowed)
+
+
+def test_validate_ip_for_tracking_valid_ip() -> None:
+    result = validate_ip_for_tracking("203.0.113.5", set(), {"192.0.2.1"})
+    assert result == "203.0.113.5"
